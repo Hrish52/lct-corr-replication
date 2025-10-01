@@ -1,33 +1,108 @@
 import numpy as np
 from scipy.stats import norm
 
-def lct_edge_stat(X, Y):
-    """
-    Day-1 placeholder to validate shapes.
-    Replace with the Cai–Liu variance-stabilized statistic on Day 5.
-    
-    """
-    R1 = np.corrcoef(X, rowvar=False)
-    R2 = np.corrcoef(Y, rowvar=False)
-    Z = 0.5 * np.log((1 + R1) / (1 - R1)) - 0.5 * np.log((1 + R2) / (1 - R2))
-    np.fill_diagonal(Z, 0.0)
-    return Z
+# ---------- helpers ----------
 
-def lct_threshold_normal(T, alpha=0.05):
-    iu, ju = np.triu_indices(T.shape[0], k=1)
+def _zscore_columns(X: np.ndarray) -> np.ndarray:
+    X = np.asarray(X, dtype=float)
+    mu = X.mean(axis=0, keepdims=True)
+    sd = X.std(axis=0, ddof=1, keepdims=True)
+    sd = np.where(sd == 0, 1.0, sd)   # avoid divide-by-zero
+    return (X - mu) / sd
+
+def _corr_from_z(Xz: np.ndarray) -> np.ndarray:
+    n = Xz.shape[0]
+    R = (Xz.T @ Xz) / (n - 1)
+    np.fill_diagonal(R, 1.0)
+    return np.clip(R, -0.999999, 0.999999)
+
+def _var_r_gaussian_approx(R: np.ndarray, n: int) -> np.ndarray:
+    # Var(r_ij) ≈ (1 - r_ij^2)^2 / (n - 1)   (fast; good under elliptical/Gaussian)
+    V = (1.0 - R**2)**2 / max(n - 1, 1)
+    np.fill_diagonal(V, 0.0)
+    return V
+
+def _var_r_jackknife(Xz: np.ndarray, R: np.ndarray) -> np.ndarray:
+    # Jackknife variance for r_ij (more robust, slower: O(n p^2)). Use for small p.
+    n, p = Xz.shape
+    XY = Xz.T @ Xz                      # sums of products
+    jk_vals = np.empty((n, p, p), float)
+    for k in range(n):
+        outer = np.outer(Xz[k], Xz[k])  # x_k y_k
+        num = XY - outer                # sum_{t≠k} x_t y_t
+        r_k = num / (n - 2)             # since columns are z-scored (sd≈1)
+        np.fill_diagonal(r_k, 1.0)
+        jk_vals[k] = np.clip(r_k, -0.999999, 0.999999)
+    r_bar = jk_vals.mean(axis=0)
+    diff = jk_vals - r_bar
+    V = (n - 1) * diff.var(axis=0, ddof=0)
+    np.fill_diagonal(V, 0.0)
+    return V
+
+# ---------- main API ----------
+
+def lct_edge_stat(X: np.ndarray, Y: np.ndarray, var_method: str = "gaussian"):
+    """
+    LCT-style statistic (LCT-N backbone):
+        T_ij = (r1_ij - r2_ij) / sqrt( Var(r1_ij) + Var(r2_ij) )
+
+    var_method: "gaussian" (fast) or "jackknife" (robust, slower)
+    Returns:
+        T  : (p,p) symmetric matrix, 0 diagonal
+        R1 : (p,p) correlations for X
+        R2 : (p,p) correlations for Y
+    """
+    # z-score columns
+    Xz = _zscore_columns(X)
+    Yz = _zscore_columns(Y)
+
+    # correlations
+    R1 = _corr_from_z(Xz)
+    R2 = _corr_from_z(Yz)
+
+    # per-edge variances
+    if var_method == "gaussian":
+        V1 = _var_r_gaussian_approx(R1, X.shape[0])
+        V2 = _var_r_gaussian_approx(R2, Y.shape[0])
+    elif var_method == "jackknife":
+        V1 = _var_r_jackknife(Xz, R1)
+        V2 = _var_r_jackknife(Yz, R2)
+    else:
+        raise ValueError("var_method must be 'gaussian' or 'jackknife'.")
+
+    # studentized difference
+    denom = np.sqrt(np.maximum(V1 + V2, 1e-12))
+    T = (R1 - R2) / denom
+    np.fill_diagonal(T, 0.0)
+    return T, R1, R2
+
+def lct_threshold_normal(T: np.ndarray, alpha: float = 0.05):
+    """
+    LCT-N threshold via normal tail FDR estimator:
+      est_fdr(t) ≈ M * q(t) / R(t), q(t)=2*(1-Phi(t)), M=#upper-tri edges
+    Pick smallest t with est_fdr(t) ≤ alpha (scan descending unique |T|).
+    Returns:
+      t_hat (float), reject_mask (1D bool for upper-tri order)
+    """
+    p = T.shape[0]
+    iu, ju = np.triu_indices(p, 1)
     absT = np.abs(T)[iu, ju]
+    if absT.size == 0:
+        return np.inf, np.zeros(0, dtype=bool)
+
     t_grid = np.unique(np.sort(absT))
     q = lambda t: 2 * (1 - norm.cdf(t))
     M = absT.size
-    t_hat, mask = None, None
+
+    best_t, best_mask = None, None
     for t in t_grid[::-1]:
         R = (absT >= t).sum()
         if R == 0:
             continue
-        est_fdr = M * q(t) / R
+        est_fdr = (M * q(t)) / R
         if est_fdr <= alpha:
-            t_hat = t
-            mask = (absT >= t)
-    if t_hat is None:
-        return np.max(t_grid) + 1, np.zeros_like(absT, dtype=bool)
-    return t_hat, mask
+            best_t = t
+            best_mask = (absT >= t)
+    if best_t is None:
+        return t_grid.max() + 1e-9, np.zeros_like(absT, dtype=bool)
+    return best_t, best_mask
