@@ -51,8 +51,8 @@ def run_once(p=250, n1=80, n2=80, rho=0.3, block=20, seed=0):
             f"fdr_by_{alpha}": V_by / max(R_by, 1),  f"power_by_{alpha}": S_by / max(m1, 1),
         })
 
-    # --- LCT-N (gaussian variance) at alpha=0.05 and 0.10 ---
-    T, _, _ = lct_edge_stat(X, Y, var_method="gaussian")
+    # --- LCT-N (Day 5: Cai–Liu variance; use "gaussian" for Day 4) ---
+    T, _, _ = lct_edge_stat(X, Y, var_method="cai_liu")
     for alpha in (0.05, 0.10):
         t_hat, mask_lct = lct_threshold_normal(T, alpha=alpha)
         R_lct = int(mask_lct.sum())
