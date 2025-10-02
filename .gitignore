@@ -13,3 +13,6 @@ results/tables/
 data/
 .vscode/
 .DS_Store
+CheckList.docs
+"~$*.docx"
+"~$*.xlsx"
