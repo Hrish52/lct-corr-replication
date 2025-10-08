@@ -6,6 +6,7 @@ sys.path.insert(0, str(ROOT))
 import csv, time
 from pathlib import Path
 import numpy as np
+import argparse
 
 from src.FisherBaselines import two_group_z_stat, pvals_from_Z, bh_threshold, by_threshold
 from src.Simulate import make_block_cov, sample_gaussian, upper_tri_pairs, truth_mask_block
@@ -86,10 +87,21 @@ def run_once(p=250, n1=80, n2=80, rho=0.3, block=20, seed=0):
     return row
 
 def run_grid():
-    grids = [
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--p-only", type=int, default=None, help="Run only this p (e.g., 500)")
+    parser.add_argument("--reps", type=int, default=None, help="Override reps")
+    args = parser.parse_args()
+
+    base_grids = [
         {"p": 250, "n1": 80, "n2": 80, "rho": 0.3,  "block": 20, "reps": 50},
         {"p": 500, "n1": 80, "n2": 80, "rho": 0.25, "block": 20, "reps": 50},
     ]
+
+    grids = [g for g in base_grids if (args.p_only is None or g["p"] == args.p_only)]
+    if args.reps is not None:
+        for g in grids:
+            g["reps"] = args.reps
+
     for g in grids:
         rows = []
         t0 = time.time()
@@ -102,7 +114,7 @@ def run_grid():
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
             w.writeheader()
             w.writerows(rows)
-        print(f"Wrote {out} in {time.time()-t0:.1f}s")
+        print(f'Wrote {out} in {time.time() - t0:.1f}s')
 
 def main():
     run_grid()
