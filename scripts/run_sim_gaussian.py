@@ -10,6 +10,7 @@ import numpy as np
 from src.FisherBaselines import two_group_z_stat, pvals_from_Z, bh_threshold, by_threshold
 from src.Simulate import make_block_cov, sample_gaussian, upper_tri_pairs, truth_mask_block
 from src.LCT import lct_edge_stat, lct_threshold_normal
+from src.LCTB import lct_threshold_bootstrap
 
 OUT = Path("results/tables")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -65,6 +66,21 @@ def run_once(p=250, n1=80, n2=80, rho=0.3, block=20, seed=0):
             f"fdr_lct_{alpha}": V_lct / max(R_lct, 1),
             f"power_lct_{alpha}": S_lct / max(m1, 1),
         })
+    
+    # --- LCT-B (bootstrap threshold), start modest B then scale
+    t_b, mask_b, info_b = lct_threshold_bootstrap(
+        X, Y, alpha=0.05, B=100, var_method="cai_liu", n_jobs=-1, rng=seed
+    )
+    R_b = int(mask_b.sum())
+    V_b = int((~truth & mask_b).sum())
+    S_b = int((truth & mask_b).sum())
+    m1 = int(truth.sum())
+    row.update({
+        "t_lctb_0.05": float(t_b),
+        "R_lctb_0.05": R_b, "V_lctb_0.05": V_b, "S_lctb_0.05": S_b,
+        "fdr_lctb_0.05": V_b / max(R_b, 1),
+        "power_lctb_0.05": S_b / max(m1, 1),
+    })
 
     row["wall_time_s"] = round(time.perf_counter() - t_start, 6)
     return row
