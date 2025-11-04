@@ -94,3 +94,31 @@ def sample_exp(n: int, rate: float, Sigma: np.ndarray, rng=None, zscore: bool = 
         sd = np.where(sd == 0, 1.0, sd)
         X = X / sd
     return X
+
+def make_block_ar1_cov(p: int, rho: float, block_size: int = 20) -> np.ndarray:
+    """
+    Σ = I_p except top-left block (k×k) is AR(1) Toeplitz with entries rho^{|i-j|}.
+    """
+    k = int(block_size)
+    Sigma = np.eye(p, dtype=float)
+    if k <= 1 or abs(rho) < 1e-15:
+        return Sigma
+    idx = np.arange(k)
+    toe = rho ** np.abs(idx[:, None] - idx[None, :])
+    np.fill_diagonal(toe, 1.0)  # ensure diag=1
+    Sigma[:k, :k] = toe
+    return Sigma
+
+def make_block_decay_cov(p: int, rho: float, block_size: int = 20, decay: float = 0.6) -> np.ndarray:
+    """
+    Σ = I_p except top-left block has decaying correlations: rho * decay^{|i-j|}, with diag=1.
+    """
+    k = int(block_size)
+    Sigma = np.eye(p, dtype=float)
+    if k <= 1 or abs(rho) < 1e-15:
+        return Sigma
+    idx = np.arange(k)
+    blk = (rho * (decay ** np.abs(idx[:, None] - idx[None, :])))
+    np.fill_diagonal(blk, 1.0)
+    Sigma[:k, :k] = blk
+    return Sigma
