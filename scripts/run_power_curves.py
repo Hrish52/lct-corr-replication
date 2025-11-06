@@ -9,7 +9,10 @@ sys.path.insert(0, str(ROOT))
 from src.FisherBaselines import two_group_z_stat, pvals_from_Z, bh_threshold, by_threshold
 from src.Simulate import make_block_cov, sample_gaussian, sample_t, sample_laplace, sample_exp, upper_tri_pairs, truth_mask_block
 from src.LCT import lct_edge_stat, lct_threshold_normal
-from src.LCTB import lct_threshold_bootstrap
+try:
+    from src.LCTB_v2 import lct_threshold_bootstrap   # faster impl
+except ImportError:
+    from src.LCTB import lct_threshold_bootstrap      # fallback to original
 
 OUT = Path("results/tables")
 OUT.mkdir(parents=True, exist_ok=True)

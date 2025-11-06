@@ -13,8 +13,11 @@ from src.Simulate import (
     truth_mask_block, upper_tri_pairs
 )
 from src.LCT import lct_edge_stat, lct_threshold_normal
-from src.LCTB import lct_threshold_bootstrap
-
+try:
+    from src.LCTB_v2 import lct_threshold_bootstrap   # faster impl
+except ImportError:
+    from src.LCTB import lct_threshold_bootstrap      # fallback to original
+    
 OUT = Path("results/tables"); OUT.mkdir(parents=True, exist_ok=True)
 _IU = {}
 def tri_pairs(p):
