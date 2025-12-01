@@ -5,6 +5,11 @@
 import sys, pathlib, os, argparse, csv, time
 from pathlib import Path
 import numpy as np
+import argparse
+
+# repo root on sys.path
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 # repo root on sys.path
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -167,6 +172,7 @@ def run_once(model="gaussian", p=250, n1=80, n2=80, rho=0.30, block=20, seed=0, 
     row["wall_time_s"] = round(time.perf_counter() - t_start, 6)
     return row
 
+
 def run_grid():
     # --- CLI ---
     parser = argparse.ArgumentParser()
@@ -252,6 +258,7 @@ def run_grid():
 
 def main():
     run_grid()
+
 
 if __name__ == "__main__":
     main()
