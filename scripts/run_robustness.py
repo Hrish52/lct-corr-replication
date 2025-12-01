@@ -17,7 +17,9 @@ try:
     from src.LCTB_v2 import lct_threshold_bootstrap   # faster impl
 except ImportError:
     from src.LCTB import lct_threshold_bootstrap      # fallback to original
-    
+
+from src.defaults import get_defaults_for  # Day-12: resolver for results/defaults.json
+
 OUT = Path("results/tables"); OUT.mkdir(parents=True, exist_ok=True)
 _IU = {}
 def tri_pairs(p):
@@ -45,7 +47,8 @@ def _dataset(model: str, n: int, p: int, Sigma: np.ndarray, seed: int, extra: di
         raise ValueError(f"Unknown model: {model}")
     return X, Y
 
-def run_once(model, p, n1, n2, rho, block, cov_kind, var_methods, B_list, seed, decay, winsorize, n_jobs, extra):
+def run_once(model, p, n1, n2, rho, block, cov_kind, var_methods, B_list, seed,
+             decay, winsorize, n_jobs, extra, use_defaults=False, defaults_file="results/defaults.json"):
     t0 = time.perf_counter()
     Sigma = _Sigma(cov_kind, p, rho=rho, block=block, decay=decay)
 
@@ -90,19 +93,38 @@ def run_once(model, p, n1, n2, rho, block, cov_kind, var_methods, B_list, seed, 
                 f"fdr_lct_{vm}_{a}": V / max(R, 1), f"power_lct_{vm}_{a}": S / max(m1, 1),
             })
 
-    # LCT-B (use first var_method, typically 'cai_liu')
-    for B in (B_list or []):
+    # LCT-B (use first var_method unless defaults override)
+    eff_B_list = (B_list or [])
+    if use_defaults and not eff_B_list:
+        eff_B_list = [-1]  # sentinel -> resolve per α from defaults.json
+
+    for B in eff_B_list:
         for a in (0.05, 0.10):
+            vm = var_methods[0] if var_methods else "cai_liu"
+            wins = winsorize
+            kwargs_extra = {}
+            B_eff = B
+            if use_defaults and B == -1:
+                d = (get_defaults_for(p, a, path=defaults_file) or {})
+                if "B" in d and d["B"] is not None:
+                    B_eff = int(d["B"])
+                if d.get("coarse_grid") is not None:
+                    kwargs_extra["coarse_grid"] = int(d["coarse_grid"])
+                if d.get("winsorize") is not None:
+                    wins = float(d["winsorize"])
+                if d.get("var_method"):
+                    vm = str(d["var_method"])
+
             t_b, mask_b, _ = lct_threshold_bootstrap(
-                X1, Y, alpha=a, B=B, var_method=var_methods[0],
-                winsorize=winsorize, n_jobs=n_jobs, rng=seed
+                X1, Y, alpha=a, B=B_eff, var_method=vm,
+                winsorize=wins, n_jobs=n_jobs, rng=seed, **kwargs_extra
             )
             Rb = int(mask_b.sum()); Vb = int((~truth & mask_b).sum()); Sb = int((truth & mask_b).sum())
             m1 = int(truth.sum())
             row.update({
-                f"t_lctb_{a}_B{B}": float(t_b),
-                f"R_lctb_{a}_B{B}": Rb, f"V_lctb_{a}_B{B}": Vb, f"S_lctb_{a}_B{B}": Sb,
-                f"fdr_lctb_{a}_B{B}": Vb / max(Rb, 1), f"power_lctb_{a}_B{B}": Sb / max(m1, 1),
+                f"t_lctb_{a}_B{B_eff}": float(t_b),
+                f"R_lctb_{a}_B{B_eff}": Rb, f"V_lctb_{a}_B{B_eff}": Vb, f"S_lctb_{a}_B{B_eff}": Sb,
+                f"fdr_lctb_{a}_B{B_eff}": Vb / max(Rb, 1), f"power_lctb_{a}_B{B_eff}": Sb / max(m1, 1),
             })
 
     row["wall_time_s"] = round(time.perf_counter() - t0, 6)
@@ -123,6 +145,11 @@ def main():
     ap.add_argument("--reps", type=int, default=30)
     ap.add_argument("--winsorize", type=float, default=None)
     ap.add_argument("--n-jobs", type=int, default=None)
+    # Day-12: defaults toggles
+    ap.add_argument("--use-defaults", action="store_true",
+                    help="Use results/defaults.json to auto-set (B, coarse_grid, winsorize, var_method) per (p, α).")
+    ap.add_argument("--defaults-file", type=str, default="results/defaults.json",
+                    help="Path to defaults.json (from scripts/make_defaults.py).")
     args = ap.parse_args()
 
     rhos = [float(x) for x in args.rho_list.split(",")]
@@ -134,6 +161,9 @@ def main():
         B_list = [int(x) for x in args.B_list.split(",")]
     else:
         B_list = [100, 200] if args.p == 250 else [50, 100]
+    # If using defaults and no explicit B_list, let run_once resolve per α
+    if args.use_defaults and not args.B_list:
+        B_list = []
 
     win = (os.name == "nt")
     n_jobs = 1 if (win and args.n_jobs is None) else (args.n_jobs if args.n_jobs is not None else -1)
@@ -152,7 +182,8 @@ def main():
                         model=args.model, p=args.p, n1=n1, n2=n2, rho=rho, block=args.block,
                         cov_kind=args.cov_kind, var_methods=var_methods, B_list=B_list,
                         seed=seed, decay=args.decay, winsorize=args.winsorize,
-                        n_jobs=n_jobs, extra=extra
+                        n_jobs=n_jobs, extra=extra,
+                        use_defaults=bool(args.use_defaults), defaults_file=args.defaults_file
                     ))
                     if (seed+1) % 5 == 0 or seed == 0:
                         print(f"[{args.model} p={args.p} cov={args.cov_kind} n1={n1} n2={n2} rho={rho}] rep {seed+1}/{args.reps}")

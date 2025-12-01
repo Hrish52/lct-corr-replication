@@ -11,6 +11,10 @@ import argparse
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# repo root on sys.path
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from src.FisherBaselines import two_group_z_stat, pvals_from_Z, bh_threshold, by_threshold
 from src.Simulate import (
     make_block_cov, sample_gaussian, sample_t, sample_laplace, sample_exp,
@@ -18,9 +22,11 @@ from src.Simulate import (
 )
 from src.LCT import lct_edge_stat, lct_threshold_normal
 try:
-    from src.LCTB_v2 import lct_threshold_bootstrap   # faster impl
+    from src.LCTB_v2 import lct_threshold_bootstrap as lctb  # Day-11 fast path
 except ImportError:
-    from src.LCTB import lct_threshold_bootstrap      # fallback to original
+    from src.LCTB import lct_threshold_bootstrap as lctb
+
+from src.defaults import get_defaults_for  # Day-12 defaults resolver
 
 OUT = Path("results/tables")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -36,6 +42,9 @@ def tri_pairs(p: int):
 _SKIP_LCTB = False
 _B_LIST = None
 _N_JOBS = -1
+# Day-12: defaults toggles
+_USE_DEFAULTS = False
+_DEFAULTS_FILE = "results/defaults.json"
 
 def _dataset(model: str, n1: int, n2: int, p: int, rho: float, block: int, seed: int, extra: dict):
     """
@@ -82,6 +91,7 @@ def run_once(model="gaussian", p=250, n1=80, n2=80, rho=0.30, block=20, seed=0, 
         **{f"k_{k}": v for k, v in (extra or {}).items()}
     }
 
+    # BH / BY
     for alpha in (0.05, 0.10):
         sel_bh = bh_threshold(pvals, alpha)
         sel_by = by_threshold(pvals, alpha)
@@ -102,9 +112,7 @@ def run_once(model="gaussian", p=250, n1=80, n2=80, rho=0.30, block=20, seed=0, 
     T, _, _ = lct_edge_stat(X, Y, var_method="cai_liu")
     for alpha in (0.05, 0.10):
         t_hat, mask = lct_threshold_normal(T, alpha=alpha)
-        R = int(mask.sum())
-        V = int((~truth & mask).sum())
-        S = int((truth & mask).sum())
+        R = int(mask.sum()); V = int((~truth & mask).sum()); S = int((truth & mask).sum())
         m1 = int(truth.sum())
         row.update({
             f"t_lct_{alpha}": float(t_hat),
@@ -121,22 +129,44 @@ def run_once(model="gaussian", p=250, n1=80, n2=80, rho=0.30, block=20, seed=0, 
             B_list = _B_LIST
         else:
             B_list = [100, 200, 500] if p == 250 else [100]
+    # Day-12: if using defaults and no explicit B-list, sentinel to resolve per-α
+    if _USE_DEFAULTS and _B_LIST is None:
+        B_list = [-1]
 
     for B in B_list:
         for alpha in (0.05, 0.10):
-            t_b, mask_b, info_b = lct_threshold_bootstrap(
-                X, Y, alpha=alpha, B=B, var_method="cai_liu",
-                n_jobs=_N_JOBS, rng=seed
+            # Resolve defaults (only if requested and using sentinel)
+            var_method = "cai_liu"
+            wins = None
+            kwargs_extra = {}
+            B_eff = B
+            if _USE_DEFAULTS and _B_LIST is None:
+                d = get_defaults_for(p, alpha, path=_DEFAULTS_FILE) or {}
+                if "B" in d and d["B"] is not None:
+                    B_eff = int(d["B"])
+                if d.get("coarse_grid") is not None:
+                    kwargs_extra["coarse_grid"] = int(d["coarse_grid"])
+                if d.get("winsorize") is not None:
+                    wins = float(d["winsorize"])
+                if d.get("var_method"):
+                    var_method = str(d["var_method"])
+
+            # Call LCT-B
+            t_b, mask_b, info_b = lctb(
+                X, Y, alpha=alpha, B=B_eff, var_method=var_method,
+                winsorize=wins, n_jobs=_N_JOBS, rng=seed, **kwargs_extra
             )
+
+            # Tally results
             Rb = int(mask_b.sum())
             Vb = int((~truth & mask_b).sum())
             Sb = int((truth & mask_b).sum())
             m1 = int(truth.sum())
             row.update({
-                f"t_lctb_{alpha}_B{B}": float(t_b),
-                f"R_lctb_{alpha}_B{B}": Rb, f"V_lctb_{alpha}_B{B}": Vb, f"S_lctb_{alpha}_B{B}": Sb,
-                f"fdr_lctb_{alpha}_B{B}": Vb / max(Rb, 1),
-                f"power_lctb_{alpha}_B{B}": Sb / max(m1, 1),
+                f"t_lctb_{alpha}_B{B_eff}": float(t_b),
+                f"R_lctb_{alpha}_B{B_eff}": Rb, f"V_lctb_{alpha}_B{B_eff}": Vb, f"S_lctb_{alpha}_B{B_eff}": Sb,
+                f"fdr_lctb_{alpha}_B{B_eff}": Vb / max(Rb, 1),
+                f"power_lctb_{alpha}_B{B_eff}": Sb / max(m1, 1),
             })
 
     row["wall_time_s"] = round(time.perf_counter() - t_start, 6)
@@ -155,14 +185,21 @@ def run_grid():
                         help="comma list for LCT-B, e.g. '50,100'. Default: p=250 -> 100,200,500; else 100.")
     parser.add_argument("--n-jobs", type=int, default=None,
                         help="workers for LCT-B; on Windows prefer 1 to avoid spawn overhead.")
+    # Day-12: defaults toggles
+    parser.add_argument("--use-defaults", action="store_true",
+                        help="Use results/defaults.json to auto-set (B, coarse_grid, winsorize, var_method) per (p, α).")
+    parser.add_argument("--defaults-file", type=str, default="results/defaults.json",
+                        help="Path to defaults.json (from scripts/make_defaults.py).")
     args = parser.parse_args()
 
     # set globals for run_once
-    global _SKIP_LCTB, _B_LIST, _N_JOBS
+    global _SKIP_LCTB, _B_LIST, _N_JOBS, _USE_DEFAULTS, _DEFAULTS_FILE
     _SKIP_LCTB = args.skip_lctb
     _B_LIST = None if args.B_list is None else [int(x) for x in args.B_list.split(",") if x.strip()]
     win = (os.name == "nt")
     _N_JOBS = 1 if (win and args.n_jobs is None) else (args.n_jobs if args.n_jobs is not None else -1)
+    _USE_DEFAULTS = bool(args.use_defaults)
+    _DEFAULTS_FILE = args.defaults_file
 
     # --- grids ---
     grids = []
