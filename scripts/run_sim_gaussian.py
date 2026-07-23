@@ -205,23 +205,23 @@ def run_grid():
     grids = []
     # Gaussian
     grids += [
-        dict(model="gaussian", p=250, n1=80, n2=80, rho=0.30, block=20, reps=50, extra={}),
-        dict(model="gaussian", p=500, n1=80, n2=80, rho=0.25, block=20, reps=50, extra={}),
+        dict(model="gaussian", p=250, n1=80,  n2=80,  rho=0.70, block=20, reps=50, extra={}),
+        dict(model="gaussian", p=500, n1=120, n2=120, rho=0.65, block=20, reps=50, extra={}),
     ]
     # t(df=6)
     grids += [
-        dict(model="t", p=250, n1=80, n2=80, rho=0.30, block=20, reps=50, extra={"df": 6}),
-        dict(model="t", p=500, n1=80, n2=80, rho=0.25, block=20, reps=50, extra={"df": 6}),
+        dict(model="t", p=250, n1=80,  n2=80,  rho=0.70, block=20, reps=50, extra={"df": 6}),
+        dict(model="t", p=500, n1=120, n2=120, rho=0.65, block=20, reps=50, extra={"df": 6}),
     ]
     # Laplace (b=1/sqrt(2))
     grids += [
-        dict(model="laplace", p=250, n1=80, n2=80, rho=0.30, block=20, reps=50, extra={"b": 1/np.sqrt(2)}),
-        dict(model="laplace", p=500, n1=80, n2=80, rho=0.25, block=20, reps=50, extra={"b": 1/np.sqrt(2)}),
+        dict(model="laplace", p=250, n1=80,  n2=80,  rho=0.70, block=20, reps=50, extra={"b": 1/np.sqrt(2)}),
+        dict(model="laplace", p=500, n1=120, n2=120, rho=0.65, block=20, reps=50, extra={"b": 1/np.sqrt(2)}),
     ]
     # Exponential(1), centered & z-scored
     grids += [
-        dict(model="exp", p=250, n1=80, n2=80, rho=0.30, block=20, reps=50, extra={"rate": 1.0}),
-        dict(model="exp", p=500, n1=80, n2=80, rho=0.25, block=20, reps=50, extra={"rate": 1.0}),
+        dict(model="exp", p=250, n1=80,  n2=80,  rho=0.70, block=20, reps=50, extra={"rate": 1.0}),
+        dict(model="exp", p=500, n1=120, n2=120, rho=0.65, block=20, reps=50, extra={"rate": 1.0}),
     ]
 
     # filter by CLI

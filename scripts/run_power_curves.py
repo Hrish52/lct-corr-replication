@@ -101,8 +101,8 @@ def main():
     ap.add_argument("--models", type=str, default="gaussian,t,laplace,exp",
                     help="comma list: gaussian,t,laplace,exp")
     ap.add_argument("--p", type=int, default=250)
-    ap.add_argument("--n-list", type=str, default="60,80,120")
-    ap.add_argument("--rho-list", type=str, default="0.20,0.25,0.30,0.35")
+    ap.add_argument("--n-list", type=str, default="80,120,200")
+    ap.add_argument("--rho-list", type=str, default="0.50,0.60,0.70,0.80")
     ap.add_argument("--reps", type=int, default=50)
     ap.add_argument("--B-list", type=str, default="")
     ap.add_argument("--winsorize", type=float, default=None)
