@@ -122,3 +122,48 @@ def make_block_decay_cov(p: int, rho: float, block_size: int = 20, decay: float 
     np.fill_diagonal(blk, 1.0)
     Sigma[:k, :k] = blk
     return Sigma
+
+def sample_t_cl(n: int, df: float, Sigma: np.ndarray, rng=None) -> np.ndarray:
+    """
+    Cai-Liu (2016) Sec. 5.1 t construction: X = Sigma^{1/2} Z with Z having
+    iid t_df components. Unlike the multivariate t (sample_t), this is NOT
+    elliptical and violates their condition (C2) -- which is the point: it
+    is the setting where Fisher-z + BH loses FDR control.
+    """
+    if df <= 2:
+        raise ValueError("df must be > 2 for finite variance")
+    rng = np.random.default_rng(rng)
+    p = Sigma.shape[0]
+    L = _chol_or_eig(Sigma)
+    Z = rng.standard_t(df, size=(n, p)) / np.sqrt(df / (df - 2.0))
+    return Z @ L.T
+
+
+def sample_exp_cl(n: int, rate: float, Sigma: np.ndarray, rng=None) -> np.ndarray:
+    """
+    Cai-Liu Sec. 5.1 exponential construction: X = Sigma^{1/2} Z with Z
+    having iid Exp(rate) components, centred and scaled to unit variance.
+    Non-elliptical; violates (C2).
+    """
+    rng = np.random.default_rng(rng)
+    p = Sigma.shape[0]
+    L = _chol_or_eig(Sigma)
+    Z = rng.exponential(scale=1.0 / rate, size=(n, p))
+    Z = (Z - 1.0 / rate) * rate            # Exp has mean = sd = 1/rate
+    return Z @ L.T
+
+
+def sample_normal_mixture(n: int, Sigma: np.ndarray, rng=None) -> np.ndarray:
+    """
+    Cai-Liu Sec. 5.1 normal mixture: X = U * Z with U ~ Uniform(0,1) a
+    scalar per observation and Z ~ N(0, Sigma). Elliptical (so (C2) holds)
+    but with kappa = 9/5 rather than 1, so Fisher-z's variance assumption
+    fails while Cai-Liu's estimated-kappa version does not. This is their
+    sharpest separating case.
+    """
+    rng = np.random.default_rng(rng)
+    p = Sigma.shape[0]
+    L = _chol_or_eig(Sigma)
+    Z = rng.normal(size=(n, p)) @ L.T
+    U = rng.uniform(0.0, 1.0, size=(n, 1))
+    return U * Z

@@ -5,8 +5,11 @@ import numpy as np
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-
-from src.Simulate import sample_gaussian, sample_t, sample_laplace, sample_exp, truth_mask_block
+from src.Simulate import (
+    sample_gaussian, sample_t, sample_laplace, sample_exp,
+    sample_t_cl, sample_exp_cl, sample_normal_mixture,
+    truth_mask_block
+)
 from src.LCT import lct_edge_stat, lct_threshold_normal
 try:
     from src.LCTB_v2 import lct_threshold_bootstrap, select_threshold_from_info   # faster impl
@@ -33,6 +36,12 @@ def _sample_from_model(model, n, p, seed, extra):
         return sample_laplace(n, b=extra.get("b", 1/np.sqrt(2)), Sigma=I, rng=seed)
     elif model == "exp":
         return sample_exp(n, rate=extra.get("rate", 1.0), Sigma=I, rng=seed, zscore=True)
+    elif model == "t_cl":
+        return sample_t_cl(n, df=extra.get("df", 6), Sigma=I, rng=seed)
+    elif model == "exp_cl":
+        return sample_exp_cl(n, rate=extra.get("rate", 1.0), Sigma=I, rng=seed)
+    elif model == "nmix":
+        return sample_normal_mixture(n, Sigma=I, rng=seed)
     else:
         raise ValueError(f"Unknown model: {model}")
 

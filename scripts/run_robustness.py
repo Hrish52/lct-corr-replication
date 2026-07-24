@@ -9,8 +9,8 @@ sys.path.insert(0, str(ROOT))
 from src.FisherBaselines import two_group_z_stat, pvals_from_Z, bh_threshold, by_threshold
 from src.Simulate import (
     sample_gaussian, sample_t, sample_laplace, sample_exp,
-    make_block_cov, make_block_ar1_cov, make_block_decay_cov,
-    truth_mask_block, upper_tri_pairs
+    sample_t_cl, sample_exp_cl, sample_normal_mixture,
+    truth_mask_block
 )
 from src.LCT import lct_edge_stat, lct_threshold_normal
 try:
@@ -43,6 +43,12 @@ def _dataset(model: str, n: int, p: int, Sigma: np.ndarray, seed: int, extra: di
         Y = sample_laplace(n, b=extra.get("b", 1/np.sqrt(2)), Sigma=Sigma, rng=seed)
     elif model == "exp":
         Y = sample_exp(n, rate=extra.get("rate", 1.0), Sigma=Sigma, rng=seed, zscore=True)
+    elif model == "t_cl":
+        Y = sample_t_cl(n, df=extra.get("df", 6), Sigma=Sigma, rng=seed)
+    elif model == "exp_cl":
+        Y = sample_exp_cl(n, rate=extra.get("rate", 1.0), Sigma=Sigma, rng=seed)
+    elif model == "nmix":
+        Y = sample_normal_mixture(n, Sigma=Sigma, rng=seed)
     else:
         raise ValueError(f"Unknown model: {model}")
     return X, Y
