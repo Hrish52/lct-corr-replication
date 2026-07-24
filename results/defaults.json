@@ -1,27 +1,13 @@
 {
   "250": {
     "0.05": {
-      "B": 200,
+      "B": 100,
       "coarse_grid": null,
       "winsorize": 5.0,
       "var_method": "cai_liu"
     },
     "0.10": {
       "B": 200,
-      "coarse_grid": null,
-      "winsorize": 5.0,
-      "var_method": "cai_liu"
-    }
-  },
-  "500": {
-    "0.05": {
-      "B": 50,
-      "coarse_grid": null,
-      "winsorize": 5.0,
-      "var_method": "cai_liu"
-    },
-    "0.10": {
-      "B": 50,
       "coarse_grid": null,
       "winsorize": 5.0,
       "var_method": "cai_liu"
