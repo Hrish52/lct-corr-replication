@@ -133,7 +133,7 @@ def run_once(model, p, n1, n2, rho, block, cov_kind, var_methods, B_list, seed,
 
             key = (B_eff, vm, wins, kwargs_extra.get("coarse_grid"))
             if key not in _cache:
-                _, _, _cache[key] = lct_threshold_bootstrap(
+                _, _, _cache[key] = lctb(
                     X1, Y, alpha=a, B=B_eff, var_method=vm,
                     winsorize=wins, n_jobs=n_jobs, rng=seed, **kwargs_extra
                 )
